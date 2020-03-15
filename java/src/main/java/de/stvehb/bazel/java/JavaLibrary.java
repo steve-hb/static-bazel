@@ -67,4 +67,15 @@ public class JavaLibrary extends AbstractRule {
 		return this;
 	}
 
+	public void resources(Glob srcs) {
+		this.getProperties().put("resources", srcs);
+	}
+
+	@SuppressWarnings("unchecked")
+	public JavaLibrary resources(StringValue... srcs) {
+		((ArrayValue<StringValue>) this.getProperties().computeIfAbsent("resources", s -> new ArrayValue<>()))
+			.addValues(srcs);
+		return this;
+	}
+
 }

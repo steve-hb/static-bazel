@@ -109,7 +109,7 @@ public class MavenProjectAnalyzer {
 
 				library = new JavaLibrary(projectGroupId + "_" + projectArtifactId, bazelPackage);// TODO: Method
 				library.srcs(new Glob("src/main/java/**/*.java"));
-				//TODO: Resources
+				library.resources(new Glob("src/main/resources/**/*"));
 			}
 
 			dependencies: { // Read all dependencies of the current module including internal and external ones
