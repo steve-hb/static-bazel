@@ -11,6 +11,7 @@ import de.stvehb.bazel.core.api.value.StringValue;
 import de.stvehb.bazel.core.util.AnalysisUtil;
 import de.stvehb.bazel.core.util.FileUtil;
 import de.stvehb.bazel.java.JavaLibrary;
+import de.stvehb.bazel.java.JavaTest;
 import de.stvehb.bazel.java.util.XmlUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,7 +94,8 @@ public class MavenProjectAnalyzer {
 			List<ImportRule> importRules = new ArrayList<>();
 			List<Rule> rules = new ArrayList<>();
 			BazelPackage bazelPackage = new BazelPackage(pomPath.getParent(), this.workspace, importRules, rules);
-			JavaLibrary library;
+			JavaLibrary mainLibrary;
+			JavaLibrary testLibrary; // due to performance reasons we will compile these once and use them as dependencies in our test
 
 			// dependency management
 			ArrayValue<StringValue> libraryDependencies = new ArrayValue<>(); // dependencies of the current library
@@ -107,9 +109,13 @@ public class MavenProjectAnalyzer {
 				String projectVersion = XmlUtil.getElement(projectInfoNode, "version").getTextContent();
 				String projectArtifactId = XmlUtil.getElement(projectNode, "artifactId").getTextContent();
 
-				library = new JavaLibrary(projectGroupId + "_" + projectArtifactId, bazelPackage);// TODO: Method
-				library.srcs(new Glob("src/main/java/**/*.java"));
-				library.resources(new Glob("src/main/resources/**/*"));
+				mainLibrary = new JavaLibrary(projectGroupId + "_" + projectArtifactId, bazelPackage);// TODO: Method
+				mainLibrary.srcs(new Glob("src/main/java/**/*.java"));
+				mainLibrary.resources(new Glob("src/main/resources/**/*"));
+
+				testLibrary = new JavaLibrary(projectGroupId + "_" + projectArtifactId + "_test", bazelPackage);// TODO: Method
+				testLibrary.srcs(new Glob("src/test/java/**/*.java"));
+				testLibrary.resources(new Glob("src/test/resources/**/*"));
 			}
 
 			dependencies: { // Read all dependencies of the current module including internal and external ones
@@ -137,11 +143,49 @@ public class MavenProjectAnalyzer {
 				);
 
 				// Add the dependencies to the current library
-				for (StringValue dep : libraryDependencies.getValues()) library.deps(dep);
+				for (StringValue dep : libraryDependencies.getValues()) mainLibrary.deps(dep);
+			}
+
+			List<JavaTest> testRules = new ArrayList<>();
+			test: {
+				//TODO: Use custom macro for dynamic test rule creation and less "java_test"-rules
+				//TODO: Is there a workaround for empty test sources?
+				// Currently bazel will throw exceptions when we try to build java_libraries without sources
+				//TODO: Look into this: https://github.com/wix-incubator/rules_jvm_test_discovery/tree/scala_to_java
+
+				Path testSources = pomPath.getParent().resolve("src/test/java/");
+				Files.walk(testSources)
+					.filter(path -> path.toString().endsWith(".java"))
+					.map(testSources::relativize)
+					.forEach(classPath -> {
+						String clazzWithPackage = classPath.toString().replace("src/test/java/", "").replace(".java", "");
+						JavaTest javaTest = new JavaTest(
+							clazzWithPackage.replaceAll("/", "_"), //TODO: Method
+							bazelPackage
+						);
+						javaTest.deps(new StringValue(testLibrary.getTargetName()));
+
+						// Avoid Bazel error caused by empty test sources
+						javaTest.srcs(new StringValue("src/test/java/" + classPath.toString())); //TODO: Solve redundancy
+						javaTest.test_class(
+							new StringValue(javaTest.getTargetName().replaceAll("_", "."))
+						);
+
+						testRules.add(javaTest);
+					}
+				);
 			}
 
 			register: {// Register everything (more like: tie everything together)
-				bazelPackage.getRules().add(library);
+				// Let's keep the order: import, variable, library, binary, test
+				bazelPackage.getRules().add(mainLibrary);
+
+				if (!testRules.isEmpty()) {
+					testLibrary.deps(new StringValue(mainLibrary.getTargetName()));
+					bazelPackage.getRules().add(testLibrary);
+					bazelPackage.getRules().addAll(testRules);
+				}
+
 				this.project.getPackages().add(bazelPackage);
 			}
 
