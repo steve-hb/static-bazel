@@ -4,7 +4,6 @@ import com.beust.jcommander.JCommander;
 import de.stvehb.bazel.cli.command.MigrateJavaCommand;
 import de.stvehb.bazel.cli.command.HelpCommand;
 import lombok.Getter;
-import lombok.SneakyThrows;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +14,7 @@ public class StaticBazelCLI {
 	private static final List<CommandContainer<?>> COMMAND_CONTAINERS = new ArrayList<>();
 
 	@SuppressWarnings({"unchecked", "rawtypes"})
-	public static void main(String... args) {
+	public static void main(String... args) throws InstantiationException, IllegalAccessException {
 		COMMAND_CONTAINERS.add(new CommandContainer<>("help", HelpCommand.class, HelpCommand::handle, "usage", "usages"));
 		COMMAND_CONTAINERS.add(new CommandContainer<>("migrate:java", MigrateJavaCommand.class, MigrateJavaCommand::handle));
 
@@ -46,8 +45,7 @@ public class StaticBazelCLI {
 		private T args;
 		private TriConsumer<JCommander, Options, T> consumer;
 
-		@SneakyThrows
-		public CommandContainer(String command, Class<T> clazz, TriConsumer<JCommander, Options, T> consumer, String... aliases) {
+		public CommandContainer(String command, Class<T> clazz, TriConsumer<JCommander, Options, T> consumer, String... aliases) throws IllegalAccessException, InstantiationException {
 			this.command = command;
 			this.clazz = clazz;
 			this.consumer = consumer;
