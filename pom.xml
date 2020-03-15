@@ -12,6 +12,7 @@
 	<modules>
 		<module>core</module>
 		<module>java</module>
+		<module>cli</module>
 	</modules>
 
 	<dependencies>
